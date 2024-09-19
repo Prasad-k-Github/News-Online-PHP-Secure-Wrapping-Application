@@ -1,0 +1,56 @@
+-- 1. Users Table
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,            -- Primary key, auto-incrementing user ID
+    name VARCHAR(100) NOT NULL,                   -- User's name
+    email VARCHAR(255) NOT NULL UNIQUE,           -- User's email (must be unique)
+    password CHAR(64) NOT NULL,                   -- Password hash (SHA-256 hash, 64 chars)
+    role ENUM('admin', 'user') DEFAULT 'user',    -- Role of the user (admin or user)
+    secret_key CHAR(32),                          -- MFA TOTP secret key (32 chars)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Timestamp when the user was created
+);
+
+-- 2. News Table
+CREATE TABLE news (
+    id INT AUTO_INCREMENT PRIMARY KEY,            -- Primary key, auto-incrementing news ID
+    title VARCHAR(255) NOT NULL,                  -- News title
+    content TEXT NOT NULL,                        -- News content
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Timestamp when the news was created
+);
+
+-- 3. Audit Logs Table (Optional for tracking user actions)
+CREATE TABLE audit_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,            -- Primary key, auto-incrementing log ID
+    user_id INT NOT NULL,                         -- ID of the user performing the action (foreign key)
+    action VARCHAR(255) NOT NULL,                 -- Action taken (e.g., "login", "logout", "add news", "delete user")
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- When the action occurred
+);
+
+-- 4. Password Reset Requests Table (Optional for password reset functionality)
+CREATE TABLE password_resets (
+    id INT AUTO_INCREMENT PRIMARY KEY,            -- Primary key, auto-incrementing reset ID
+    user_id INT NOT NULL,                         -- User ID for whom the reset was requested (foreign key)
+    token CHAR(64) NOT NULL,                      -- Token used for password reset
+    expires_at TIMESTAMP NOT NULL                 -- Expiration time of the reset token
+);
+
+-- 5. User Sessions Table (Optional for session management)
+CREATE TABLE user_sessions (
+    id INT AUTO_INCREMENT PRIMARY KEY,            -- Primary key, auto-incrementing session ID
+    user_id INT NOT NULL,                         -- ID of the logged-in user (foreign key)
+    session_token CHAR(64) NOT NULL,              -- Session token to validate the session
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp when the session started
+    expires_at TIMESTAMP                         -- Timestamp when the session expires
+);
+
+-- Foreign Key Constraints
+ALTER TABLE audit_logs
+ADD CONSTRAINT fk_user
+FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE password_resets
+ADD CONSTRAINT fk_user_reset
+FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE user_sessions
+ADD CONSTRAINT fk_user_session
+FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
