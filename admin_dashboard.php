@@ -1,7 +1,8 @@
 <?php
 // Start session and include database configuration
-session_start();
+require 'session.php';
 require 'config.php';
+
 
 // Check if user is logged in and has admin role
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
@@ -14,68 +15,95 @@ $news = [];
 $users = [];
 $success = '';
 $errors = [];
+$editMode = false;
+$editNews = ['id' => '', 'title' => '', 'content' => ''];
 
-// Fetch news
-try {
-    $stmt = $pdo->query("SELECT * FROM news");
-    $news = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $errors[] = 'Error fetching news: ' . $e->getMessage();
+// Function to fetch news items
+function fetchNews($pdo)
+{
+    try {
+        $stmt = $pdo->query("SELECT * FROM news");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        return ['error' => 'Error fetching news: ' . $e->getMessage()];
+    }
 }
 
-// Fetch users
-try {
-    $stmt = $pdo->query("SELECT id, name, email, role FROM users");
-    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $errors[] = 'Error fetching users: ' . $e->getMessage();
+// Function to fetch users
+function fetchUsers($pdo)
+{
+    try {
+        $stmt = $pdo->query("SELECT id, name, email, role FROM users");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        return ['error' => 'Error fetching users: ' . $e->getMessage()];
+    }
 }
 
-// Handle add news
-if (isset($_POST['add_news'])) {
+// Fetch news and users
+$news = fetchNews($pdo);
+$users = fetchUsers($pdo);
+
+// Check if edit news action is triggered
+if (isset($_GET['action']) && $_GET['action'] === 'edit_news' && isset($_GET['id'])) {
+    $newsId = $_GET['id'];
+
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM news WHERE id = :id");
+        $stmt->execute([':id' => $newsId]);
+        $editNews = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($editNews) {
+            $editMode = true; // Flag to indicate we are in edit mode
+        } else {
+            $errors[] = 'News item not found.';
+        }
+    } catch (PDOException $e) {
+        $errors[] = 'Error fetching news for edit: ' . $e->getMessage();
+    }
+}
+
+// Handle add or update news
+if (isset($_POST['add_news']) || isset($_POST['update_news'])) {
     $title = trim($_POST['title']);
     $content = trim($_POST['content']);
+    $newsId = $_POST['news_id'] ?? '';
 
     if (empty($title) || empty($content)) {
         $errors[] = 'Title and content are required.';
     }
 
     if (empty($errors)) {
-        try {
-            $stmt = $pdo->prepare("INSERT INTO news (title, content, created_at) VALUES (:title, :content, NOW())");
-            $stmt->execute([
-                ':title' => $title,
-                ':content' => $content
-            ]);
-            $success = 'News added successfully!';
-        } catch (PDOException $e) {
-            $errors[] = 'Database error: ' . $e->getMessage();
+        if (isset($_POST['update_news']) && $newsId) {
+            // Update news
+            try {
+                $stmt = $pdo->prepare("UPDATE news SET title = :title, content = :content WHERE id = :id");
+                $stmt->execute([
+                    ':title' => $title,
+                    ':content' => $content,
+                    ':id' => $newsId
+                ]);
+                $_SESSION['message'] = 'News updated successfully!';
+            } catch (PDOException $e) {
+                $errors[] = 'Database error: ' . $e->getMessage();
+            }
+        } else {
+            // Add new news
+            try {
+                $stmt = $pdo->prepare("INSERT INTO news (title, content, created_at) VALUES (:title, :content, NOW())");
+                $stmt->execute([
+                    ':title' => $title,
+                    ':content' => $content
+                ]);
+                $_SESSION['message'] = 'News added successfully!';
+            } catch (PDOException $e) {
+                $errors[] = 'Database error: ' . $e->getMessage();
+            }
         }
-    }
-}
 
-// Handle update news
-if (isset($_POST['update_news'])) {
-    $newsId = $_POST['news_id'];
-    $title = trim($_POST['title']);
-    $content = trim($_POST['content']);
-
-    if (empty($title) || empty($content)) {
-        $errors[] = 'Title and content are required.';
-    }
-
-    if (empty($errors)) {
-        try {
-            $stmt = $pdo->prepare("UPDATE news SET title = :title, content = :content WHERE id = :id");
-            $stmt->execute([
-                ':title' => $title,
-                ':content' => $content,
-                ':id' => $newsId
-            ]);
-            $success = 'News updated successfully!';
-        } catch (PDOException $e) {
-            $errors[] = 'Database error: ' . $e->getMessage();
-        }
+        // Redirect after adding or updating news
+        header('Location: admin_dashboard.php');
+        exit();
     }
 }
 
@@ -86,11 +114,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_news' && isset($_GET['
     try {
         $stmt = $pdo->prepare("DELETE FROM news WHERE id = :id");
         $stmt->execute([':id' => $newsId]);
-        $success = 'News deleted successfully!';
+        $_SESSION['message'] = 'News deleted successfully!';
     } catch (PDOException $e) {
         $errors[] = 'Database error: ' . $e->getMessage();
     }
 
+    // Redirect after deleting news
     header('Location: admin_dashboard.php');
     exit();
 }
@@ -102,11 +131,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_user' && isset($_GET['
     try {
         $stmt = $pdo->prepare("DELETE FROM users WHERE id = :id");
         $stmt->execute([':id' => $userId]);
-        $success = 'User deleted successfully!';
+        $_SESSION['message'] = 'User deleted successfully!';
     } catch (PDOException $e) {
         $errors[] = 'Database error: ' . $e->getMessage();
     }
 
+    // Redirect after deleting user
     header('Location: admin_dashboard.php');
     exit();
 }
@@ -127,16 +157,25 @@ if (isset($_POST['change_role'])) {
                 ':role' => $newRole,
                 ':id' => $userId
             ]);
-            $success = 'User role updated successfully!';
+            $_SESSION['message'] = 'User role updated successfully!';
         } catch (PDOException $e) {
             $errors[] = 'Database error: ' . $e->getMessage();
         }
+
+        // Redirect after deleting user
+        header('Location: admin_dashboard.php');
+        exit();
     }
 }
+
+// Display success message if set
+$message = isset($_SESSION['message']) ? $_SESSION['message'] : '';
+unset($_SESSION['message']); // Clear the message after displaying
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -149,6 +188,7 @@ if (isset($_POST['change_role'])) {
             margin: 0;
             padding: 0;
         }
+
         .container {
             max-width: 1200px;
             margin: 20px auto;
@@ -157,25 +197,28 @@ if (isset($_POST['change_role'])) {
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
+
         h1 {
             margin-bottom: 20px;
             color: #333;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
+
+        .alert {
+            padding: 10px;
+            border-radius: 5px;
             margin-bottom: 20px;
         }
-        table, th, td {
-            border: 1px solid #ddd;
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
         }
-        th, td {
-            padding: 8px;
-            text-align: left;
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
         }
-        th {
-            background-color: #f4f4f4;
-        }
+
         .btn {
             padding: 10px 20px;
             border: none;
@@ -185,38 +228,37 @@ if (isset($_POST['change_role'])) {
             text-decoration: none;
             margin-right: 5px;
         }
+
         .btn-add {
             background-color: #007bff;
         }
-        .btn-add:hover {
-            background-color: #0056b3;
-        }
+
         .btn-edit {
             background-color: #ffc107;
         }
-        .btn-edit:hover {
-            background-color: #e0a800;
-        }
+
         .btn-delete {
             background-color: #dc3545;
         }
-        .btn-delete:hover {
-            background-color: #c82333;
-        }
+
         .form-group {
             margin-bottom: 15px;
         }
+
         label {
             display: block;
             margin-bottom: 5px;
             font-weight: bold;
         }
-        input, textarea {
+
+        input,
+        textarea {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
         }
+
         .btn-submit {
             padding: 10px 20px;
             background-color: #28a745;
@@ -225,110 +267,119 @@ if (isset($_POST['change_role'])) {
             border-radius: 5px;
             cursor: pointer;
         }
+
         .btn-submit:hover {
             background-color: #218838;
         }
+
         .error {
             color: #dc3545;
             margin-bottom: 20px;
         }
+
         .success {
             color: #28a745;
             margin-bottom: 20px;
         }
     </style>
 </head>
+
 <body>
 
-<div class="container">
-    <h1>Admin Dashboard</h1>
-    <a href="logout.php" class="btn">Logout</a>
+    <div class="container">
 
-    <?php if (!empty($errors)): ?>
-        <div class="error"><?php echo implode('<br>', $errors); ?></div>
-    <?php endif; ?>
+        <?php if ($message): ?>
+            <div class="alert success" id="successMessage">
+                <?php echo htmlspecialchars($message); ?>
+            </div>
+            <script>
+                // Automatically hide the success message after 3 seconds
+                setTimeout(function() {
+                    document.getElementById('successMessage').style.display = 'none';
+                }, 3000);
+            </script>
+        <?php endif; ?>
 
-    <?php if ($success): ?>
-        <div class="success"><?php echo $success; ?></div>
-    <?php endif; ?>
+        <center>
+            <h1>Admin Dashboard</h1>
+            <div class="form-group">
+                <a href="logout.php" class="btn btn-delete">Log out</a>
+            </div>
+        </center>
+        <a href="logout.php" class="btn">Logout</a>
 
-    <!-- Form for adding news -->
-    <h2>Add News</h2>
-    <form method="POST">
-        <div class="form-group">
-            <label for="title">Title</label>
-            <input type="text" id="title" name="title" required>
-        </div>
-        <div class="form-group">
-            <label for="content">Content</label>
-            <textarea id="content" name="content" rows="5" required></textarea>
-        </div>
-        <button type="submit" name="add_news" class="btn-submit">Add News</button>
-    </form>
+        <h2>Manage News</h2>
 
-    <!-- Display news -->
-    <h2>Manage News</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Content</th>
-                <th>Created At</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($news as $newsItem): ?>
+        <form method="POST">
+            <input type="hidden" name="news_id" value="<?php echo $editMode ? htmlspecialchars($editNews['id']) : ''; ?>">
+            <div class="form-group">
+                <label for="title">Title:</label>
+                <input type="text" name="title" value="<?php echo $editMode ? htmlspecialchars($editNews['title']) : ''; ?>" required>
+            </div>
+            <div class="form-group">
+                <label for="content">Content:</label>
+                <textarea name="content" rows="5" required><?php echo $editMode ? htmlspecialchars($editNews['content']) : ''; ?></textarea>
+            </div>
+            <button type="submit" name="<?php echo $editMode ? 'update_news' : 'add_news'; ?>" class="btn-submit"><?php echo $editMode ? 'Update News' : 'Add News'; ?></button>
+        </form>
+
+        <h2>Current News</h2>
+        <table border="1" cellspacing="0" cellpadding="10">
+            <thead>
                 <tr>
-                    <td><?php echo htmlspecialchars($newsItem['id']); ?></td>
-                    <td><?php echo htmlspecialchars($newsItem['title']); ?></td>
-                    <td><?php echo htmlspecialchars(substr($newsItem['content'], 0, 50)) . '...'; ?></td>
-                    <td><?php echo htmlspecialchars($newsItem['created_at']); ?></td>
-                    <td>
-                        <a href="admin_dashboard.php?action=edit_news&id=<?php echo htmlspecialchars($newsItem['id']); ?>" class="btn btn-edit">Edit</a>
-                        <a href="admin_dashboard.php?action=delete_news&id=<?php echo htmlspecialchars($newsItem['id']); ?>" class="btn btn-delete" onclick="return confirm('Are you sure you want to delete this news item?');">Delete</a>
-                    </td>
+                    <th>Title</th>
+                    <th>Content</th>
+                    <th>Actions</th>
                 </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                <?php foreach ($news as $item): ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($item['title']); ?></td>
+                        <td><?php echo htmlspecialchars($item['content']); ?></td>
+                        <td>
+                            <a href="?action=edit_news&id=<?php echo $item['id']; ?>" class="btn btn-edit">Edit</a>
+                            <a href="?action=delete_news&id=<?php echo $item['id']; ?>" class="btn btn-delete" onclick="return confirm('Are you sure you want to delete this news?');">Delete</a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
 
-    <!-- Display users -->
-    <h2>Manage Users</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($users as $user): ?>
+        <h2>Manage Users</h2>
+        <table border="1" cellspacing="0" cellpadding="10">
+            <thead>
                 <tr>
-                    <td><?php echo htmlspecialchars($user['id']); ?></td>
-                    <td><?php echo htmlspecialchars($user['name']); ?></td>
-                    <td><?php echo htmlspecialchars($user['email']); ?></td>
-                    <td><?php echo htmlspecialchars($user['role']); ?></td>
-                    <td>
-                        <form method="POST" style="display:inline;">
-                            <input type="hidden" name="user_id" value="<?php echo htmlspecialchars($user['id']); ?>">
-                            <select name="role">
-                                <option value="user" <?php echo ($user['role'] === 'user') ? 'selected' : ''; ?>>User</option>
-                                <option value="admin" <?php echo ($user['role'] === 'admin') ? 'selected' : ''; ?>>Admin</option>
-                            </select>
-                            <button type="submit" name="change_role" class="btn btn-edit">Change Role</button>
-                        </form>
-                        <a href="admin_dashboard.php?action=delete_user&id=<?php echo htmlspecialchars($user['id']); ?>" class="btn btn-delete" onclick="return confirm('Are you sure you want to delete this user?');">Delete</a>
-                    </td>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Actions</th>
                 </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
+            </thead>
+            <tbody>
+                <?php foreach ($users as $user): ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($user['name']); ?></td>
+                        <td><?php echo htmlspecialchars($user['email']); ?></td>
+                        <td>
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
+                                <select name="role" required>
+                                    <option value="user" <?php if ($user['role'] === 'user') echo 'selected'; ?>>User</option>
+                                    <option value="admin" <?php if ($user['role'] === 'admin') echo 'selected'; ?>>Admin</option>
+                                </select>
+                                <button type="submit" name="change_role" class="btn btn-edit">Change Role</button>
+                            </form>
+                        </td>
+                        <td>
+                            <a href="?action=delete_user&id=<?php echo $user['id']; ?>" class="btn btn-delete" onclick="return confirm('Are you sure you want to delete this user?');">Delete</a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table><br>
 
+    </div>
 </body>
+
 </html>

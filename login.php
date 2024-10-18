@@ -1,6 +1,6 @@
 <?php
 // Start the session
-session_start();
+require 'session.php';
 
 // Include database configuration
 require_once 'config.php';
@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($errors)) {
         try {
             // Fetch user details from the database
-            $stmt = $pdo->prepare("SELECT id, password, salt, role FROM users WHERE email = :email");
+            $stmt = $pdo->prepare("SELECT id, password, salt, role, name FROM users WHERE email = :email");
             $stmt->execute([':email' => $email]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -64,14 +64,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - News Today</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(to right, #ff7e5f, #feb47b);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -80,104 +81,147 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         .container {
-            background-color: white;
+            background: rgba(255, 255, 255, 0.9);
             padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             width: 100%;
             max-width: 400px;
+            backdrop-filter: blur(10px);
         }
 
         h2 {
             margin-bottom: 20px;
             color: #333;
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
         }
 
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         label {
             display: block;
             margin-bottom: 5px;
             font-weight: bold;
+            color: #555;
         }
 
-        input[type="email"], input[type="password"] {
+        input[type="email"],
+        input[type="password"] {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
-            border-radius: 5px;
+            border-radius: 8px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="email"]:focus,
+        input[type="password"]:focus {
+            border-color: #ff7e5f;
+            outline: none;
         }
 
         .btn {
             padding: 10px 20px;
-            background-color: #007bff;
+            background-color: #ff7e5f;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 18px;
             width: 100%;
+            transition: background-color 0.3s;
         }
 
         .btn:hover {
-            background-color: #0056b3;
+            background-color: #feb47b;
+        }
+
+        .btnback {
+            padding: 10px 20px;
+            background-color: #FF5733;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            width: 100%;
+            transition: background-color 0.3s;
+        }
+
+        .btnback:hover {
+            background-color: #FFC000;
         }
 
         .link {
             display: block;
-            margin-top: 10px;
+            margin-top: 15px;
             color: #007bff;
             text-align: center;
             text-decoration: none;
+            transition: color 0.3s;
         }
 
         .link:hover {
             text-decoration: underline;
+            color: #0056b3;
         }
 
         .error {
-            color: red;
+            color: #d9534f;
             font-size: 14px;
             margin-bottom: 15px;
+            text-align: center;
         }
     </style>
 </head>
+
 <body>
 
-<div class="container">
-    <h2>Login</h2>
+    <div class="container">
+        <h2>Login</h2>
 
-    <!-- Display errors from server-side -->
-    <?php if (!empty($errors)): ?>
-        <div class="error">
-            <?php echo implode('<br>', array_map('htmlspecialchars', $errors)); ?>
-        </div>
-    <?php endif; ?>
+        <!-- Display errors from server-side -->
+        <?php if (!empty($errors)): ?>
+            <div class="error">
+                <?php echo implode('<br>', array_map('htmlspecialchars', $errors)); ?>
+            </div>
+        <?php endif; ?>
 
-    <!-- Display success message -->
-    <?php if ($success): ?>
-        <div class="success">
-            <?php echo htmlspecialchars($success); ?>
-        </div>
-    <?php endif; ?>
+        <!-- Display success message -->
+        <?php if ($success): ?>
+            <div class="success">
+                <?php echo htmlspecialchars($success); ?>
+            </div>
+        <?php endif; ?>
 
-    <form method="POST">
-        <div class="form-group">
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" required>
-        </div>
+        <form method="POST">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required>
+            </div>
 
-        <div class="form-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" required>
-        </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
 
-        <button type="submit" class="btn">Login</button>
-        <a href="forgot_password.php" class="link">Forgot Password?</a>
-    </form>
-</div>
+            <div class="form-group">
+                <button type="submit" class="btn">Login</button><br>
+            </div>
+            
+            <a href="forgot_password.php" class="link">Forgot Password?</a>
+
+            <div class="form-group">
+                <a href="logout.php" class="btnback">Back</a>
+            </div>
+        </form>
+    </div>
 
 </body>
+
 </html>

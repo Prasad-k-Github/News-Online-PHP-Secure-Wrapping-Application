@@ -1,14 +1,14 @@
 <?php
 
 // Start the session
-session_start(); 
+require 'session.php';
 
 // Include database configuration
-require 'config.php'; // Ensure this path is correct
+require 'config.php';
 
 // Redirect to homepage if user is already logged in
 if (isset($_SESSION['user_id'])) {
-    header('Location: index.php'); // Redirect to the homepage or another page
+    header('Location: index.php');
     exit();
 }
 
@@ -46,6 +46,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $errors[] = 'Passwords do not match.';
     }
 
+    // Check if the email already exists in the database
+    if (empty($errors)) {
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email");
+            $stmt->execute([':email' => $email]);
+            $user = $stmt->fetch();
+
+            if ($user) {
+                $errors[] = 'This email address is already registered.';
+            }
+        } catch (PDOException $e) {
+            $errors[] = 'Database error: ' . $e->getMessage();
+        }
+    }
+
     // If there are no errors, proceed with registration
     if (empty($errors)) {
         // Secure password handling
@@ -77,14 +92,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>News Today - Register</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #ff758c, #ff7eb3);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -95,15 +111,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .container {
             background-color: white;
             padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
             width: 100%;
             max-width: 400px;
+            text-align: center;
         }
 
         h2 {
             margin-bottom: 20px;
-            color: #333;
+            color: #ff4081;
+            /* A vibrant pink color */
         }
 
         .form-group {
@@ -114,38 +132,74 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             display: block;
             margin-bottom: 5px;
             font-weight: bold;
+            color: #333;
         }
 
-        input[type="text"], input[type="email"], input[type="password"] {
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
             width: 100%;
             padding: 10px;
-            border: 1px solid #ccc;
+            border: 1px solid #ff4081;
+            /* Pink border */
             border-radius: 5px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        input[type="password"]:focus {
+            border-color: #ff7eb3;
+            /* Lighter pink on focus */
+            outline: none;
         }
 
         .btn {
             padding: 10px 20px;
-            background-color: #28a745;
+            background-color: #ff4081;
+            /* Main button color */
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             font-size: 16px;
             width: 100%;
+            transition: background-color 0.3s;
         }
 
         .btn:hover {
-            background-color: #218838;
+            background-color: #e91e63;
+            /* Darker pink on hover */
+        }
+
+        .btnlogin {
+            padding: 10px 20px;
+            background-color: #2196F3;
+            /* Blue color for login button */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background-color 0.3s;
+        }
+
+        .btnlogin:hover {
+            background-color: #1976D2;
+            /* Darker blue on hover */
         }
 
         .error {
-            color: red;
+            color: #d32f2f;
+            /* Red for error messages */
             font-size: 14px;
             margin-bottom: 15px;
         }
 
         .success {
-            color: green;
+            color: #388E3C;
+            /* Green for success messages */
             font-size: 14px;
             margin-bottom: 15px;
         }
@@ -162,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 errors.push("All fields are required.");
             }
 
-            if (!/\S+@\S+\.\S+/.test(email)) {
+            else if (!/\S+@\S+\.\S+/.test(email)) {
                 errors.push("Invalid email format.");
             }
 
@@ -171,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 errors.push("Password must be at least 8 characters long, contain at least one uppercase letter, one lowercase letter, one number, and one special character.");
             }
 
-            if (password !== confirmPassword) {
+            else if (password !== confirmPassword) {
                 errors.push("Passwords do not match.");
             }
 
@@ -183,50 +237,58 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     </script>
 </head>
+
 <body>
 
-<div class="container">
-    <h2>Register</h2>
+    <div class="container">
+        <h2>Register</h2>
 
-    <!-- Display errors from server-side -->
-    <?php if (!empty($errors)): ?>
-        <div class="error">
-            <?php echo implode('<br>', $errors); ?>
-        </div>
-    <?php endif; ?>
+        <!-- Display errors from server-side -->
+        <?php if (!empty($errors)): ?>
+            <div class="error">
+                <?php echo implode('<br>', $errors); ?>
+            </div>
+        <?php endif; ?>
 
-    <!-- Display success message -->
-    <?php if ($success): ?>
-        <div class="success">
-            <?php echo $success; ?>
-        </div>
-    <?php endif; ?>
+        <!-- Display success message -->
+        <?php if ($success): ?>
+            <div class="success">
+                <?php echo $success; ?>
+            </div>
+        <?php endif; ?>
 
-    <form method="POST" onsubmit="return validateForm()">
-        <div class="form-group">
-            <label for="name">Name</label>
-            <input type="text" id="name" name="name">
-        </div>
+        <form method="POST" onsubmit="return validateForm()">
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" required>
+            </div>
 
-        <div class="form-group">
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email">
-        </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email"required>
+            </div>
 
-        <div class="form-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password">
-        </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password"required>
+            </div>
 
-        <div class="form-group">
-            <label for="confirm_password">Confirm Password</label>
-            <input type="password" id="confirm_password" name="confirm_password">
-        </div>
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password</label>
+                <input type="password" id="confirm_password" name="confirm_password"required>
+            </div>
 
-        <button type="submit" class="btn">Register</button>
-        <a href="login.php" class="btn btn-login">Login</a>
-    </form>
-</div>
+            <div class="form-group">
+                <button type="submit" class="btn">Register</button>
+            </div>
+
+            <div class="form-group">
+                <a href="login.php" class="btnlogin">Login</a>
+            </div>
+
+        </form>
+    </div>
 
 </body>
+
 </html>
